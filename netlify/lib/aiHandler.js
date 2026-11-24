@@ -19,7 +19,9 @@ const LIMITS = {
   maxSystemChars: 20000,
   defaultTokens: 2048,
   maxTokens: 8192,
-  timeoutMs: 45000,
+  // Netlify ends synchronous functions after ~30 seconds with a bare 504.
+  // Stopping the provider call earlier lets us return a readable JSON error instead.
+  timeoutMs: 25000,
 };
 
 const isConfigured = (provider, env) => Boolean(env[provider.envKey] && String(env[provider.envKey]).trim());
@@ -125,7 +127,7 @@ export function validateRequest(body) {
  * Main entry point used by the Netlify Function.
  * Always resolves (never throws) to { status, body }.
  */
-export async function handleAiRequest({ method, body, env, fetchImpl = globalThis.fetch }) {
+export async function handleAiRequest({ method, body, env, fetchImpl = globalThis.fetch, timeoutMs = LIMITS.timeoutMs }) {
   try {
     if (method === 'GET') return { status: 200, body: getStatus(env) };
     if (method !== 'POST') throw new AiError('METHOD_NOT_ALLOWED', 'Use GET or POST.', 405);
@@ -135,7 +137,7 @@ export async function handleAiRequest({ method, body, env, fetchImpl = globalThi
     const model = modelFor(provider, env);
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), LIMITS.timeoutMs);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     let text;
     try {
       text = await provider.generate({

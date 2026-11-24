@@ -26,6 +26,11 @@ export const geminiProvider = {
       generationConfig: {
         maxOutputTokens: maxTokens,
         ...(json ? { responseMimeType: 'application/json' } : {}),
+        // Gemini 3+ models "think" at a medium level by default, which can take
+        // longer than Netlify's ~30 s function limit. Planning and chat don't need
+        // deep reasoning, so ask for low thinking. (2.5-and-older models use a
+        // different setting, so they are left untouched.)
+        ...(/^gemini-([3-9]|\d{2,})/.test(model) ? { thinkingConfig: { thinkingLevel: 'low' } } : {}),
       },
     };
     if (system) body.systemInstruction = { parts: [{ text: system }] };

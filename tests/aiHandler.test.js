@@ -51,6 +51,28 @@ test('Gemini adapter: request shape and normalised response', async () => {
   assert.equal(captured.body.generationConfig.responseMimeType, 'application/json');
 });
 
+test('Gemini 3+ requests low thinking; older models are left unchanged', async () => {
+  const bodies = [];
+  const fetchImpl = async (url, init) => {
+    bodies.push(JSON.parse(init.body));
+    return geminiOk('ok')();
+  };
+  await handleAiRequest({ ...ask(), env: { GEMINI_API_KEY: 'k' }, fetchImpl }); // default model
+  await handleAiRequest({ ...ask(), env: { GEMINI_API_KEY: 'k', GEMINI_MODEL: 'gemini-2.5-flash' }, fetchImpl });
+  assert.deepEqual(bodies[0].generationConfig.thinkingConfig, { thinkingLevel: 'low' });
+  assert.equal(bodies[1].generationConfig.thinkingConfig, undefined);
+});
+
+test('a slow provider returns a JSON TIMEOUT error before the platform limit', async () => {
+  const hang = (url, init) =>
+    new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))));
+  const started = Date.now();
+  const r = await handleAiRequest({ ...ask(), env: { GEMINI_API_KEY: 'k' }, fetchImpl: hang, timeoutMs: 50 });
+  assert.equal(r.status, 504);
+  assert.equal(r.body.error.code, 'TIMEOUT');
+  assert.ok(Date.now() - started < 1000);
+});
+
 test('Claude adapter: request shape and normalised response', async () => {
   let captured;
   const fetchImpl = async (url, init) => {
